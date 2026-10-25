@@ -1,6 +1,7 @@
 __pycache__
 dataset
 image
+experimental
 *.csv
 *.env
 *.xlsx
