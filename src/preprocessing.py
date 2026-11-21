@@ -1,131 +1,170 @@
 import numpy as np
 import pandas as pd
 
+DEFAULT_DATA_PATH = "./dataset/all_months_clean.csv"
+TOP_N_CATEGORIES  = 20
+VAL_MONTHS        = 3
+TEST_MONTHS       = 3
+
 MONTH_MAP = {
     "January": 1, "February": 2, "March": 3, "April": 4,
     "May": 5, "June": 6, "July": 7, "August": 8,
     "September": 9, "October": 10, "November": 11, "December": 12
 }
 
-JAVA_PROVINCES = {
-    "BANTEN", "DKI JAKARTA", "JAWA BARAT",
-    "JAWA TENGAH", "DI YOGYAKARTA", "JAWA TIMUR"
+JABODETABEK_JABAR_BANTEN = {"BANTEN", "DKI JAKARTA", "JAWA BARAT"}
+JATENG_DIY_JATIM         = {"JAWA TENGAH", "DI YOGYAKARTA", "JAWA TIMUR"}
+JAVA_PROVINCES           = JABODETABEK_JABAR_BANTEN | JATENG_DIY_JATIM
+SUMATERA_PROVINCES       = {
+    "ACEH", "SUMATERA UTARA", "SUMATERA BARAT", "RIAU", "KEPULAUAN RIAU",
+    "JAMBI", "SUMATERA SELATAN", "KEPULAUAN BANGKA BELITUNG", "BENGKULU", "LAMPUNG"
 }
 
-NUMERIC_FEATURES = [
-    "log_total_qty",
-    "log_total_weight_gr",
-    "log_Total Diskon",
-    "num_product_categories",
-    "log_Perkiraan Ongkos Kirim",
-    "log_weight_per_item",
-    "log_shipping_per_kg",
-    "is_missing_waktu",
-    "order_hour",
-    "order_dayofweek",
-    "is_late_night",
-    "is_cod",
-    "is_java",
-    "has_discount",
-    "is_multi_category",
-    "same_day_repeat_count"
+NUM_FEATURES = [
+    "log_total_qty", "log_total_weight_gr", "log_Total Diskon",
+    "log_Perkiraan Ongkos Kirim", "log_weight_per_item", "log_shipping_per_kg",
+    "num_product_categories", "order_hour", "order_dayofweek",
+    "is_missing_timestamp", "is_late_night", "is_cod", "is_java",
+    "has_discount", "is_multi_category", "same_day_repeat_count"
 ]
 
-CATEGORICAL_FEATURES = [
-    "Metode Pembayaran",
-    "courier_group",
-    "Provinsi",
-    "top_product_cat"
-]
+CAT_FEATURES = ["Metode Pembayaran", "shipping_tier", "destination_zone", "Provinsi", "top_product_cat"]
+ALL_FEATURES = NUM_FEATURES + CAT_FEATURES
 
 
-def load_and_clean_data(filepath: str = "./dataset/all_months_clean.csv") -> pd.DataFrame:
+def map_destination_zone(prov: str) -> str:
+    p = str(prov).strip().upper()
+    if p in JABODETABEK_JABAR_BANTEN:
+        return "1. Jabodetabek, Jabar & Banten"
+    if p in JATENG_DIY_JATIM:
+        return "2. Jawa Tengah, DIY & Jawa Timur"
+    if p in SUMATERA_PROVINCES:
+        return "3. Pulau Sumatera"
+    return "4. Kalimantan, Sulawesi, Bali-Nusra & Timur"
+
+
+def map_shipping_tier(opsi: str) -> str:
+    s = str(opsi).lower()
+    if "hemat" in s or "kargo" in s:
+        return "Hemat / Kargo"
+    if "reguler" in s:
+        return "Reguler"
+    if "instant" in s or "same day" in s or "next day" in s:
+        return "Instant / Same Day"
+    return "Ekonomi / Lainnya"
+
+
+def load_and_clean_data(filepath: str = DEFAULT_DATA_PATH) -> pd.DataFrame:
     """Loads raw CSV, filters binary target, removes leakage, and engineers t0 features."""
     df = pd.read_csv(filepath)
-
-    # 1. Binary target: Batal = 1, Selesai = 0 (drop ongoing orders)
     df = df[df["Status Pesanan"].isin(["Selesai", "Batal"])].copy()
-    df["target"] = (df["Status Pesanan"] == "Batal").astype(int)
+    df["target_batal"] = (df["Status Pesanan"] == "Batal").astype(int)
 
-    # 2. Recover Year-Month from source_file & sort chronologically FIRST
-    extracted = df["source_file"].astype(str).str.extract(r"([A-Za-z]+)Sales(\d{4})")
-    df["order_year"] = extracted[1].fillna("2024").astype(int)
-    df["order_month"] = extracted[0].map(MONTH_MAP).fillna(1).astype(int)
-    df["year_month_sort"] = df["order_year"] * 100 + df["order_month"]
-
-    dt_raw = pd.to_datetime(df["Waktu Pesanan Dibuat"], errors="coerce")
-    fallback_dt = pd.to_datetime(
-        df["order_year"].astype(str) + "-" + df["order_month"].astype(str).str.zfill(2) + "-15"
-    )
-    df["dt_sort"] = dt_raw.fillna(fallback_dt)
-    df = df.sort_values(["year_month_sort", "dt_sort", "order_id"]).reset_index(drop=True)
-
-    # 3. Temporal features + missing timestamp flag
+    # Recover Year-Month & sort chronologically
+    ext = df["source_file"].astype(str).str.extract(r"([A-Za-z]+)Sales(\d{4})")
+    df["order_year_month"] = ext[1].fillna("2024") + "-" + ext[0].map(MONTH_MAP).fillna(1).astype(int).astype(str).str.zfill(2)
     dt = pd.to_datetime(df["Waktu Pesanan Dibuat"], errors="coerce")
-    df["is_missing_waktu"] = dt.isna().astype(int)
+    df["dt_sort"] = dt.fillna(pd.to_datetime(df["order_year_month"] + "-15"))
+    df = df.sort_values(["order_year_month", "dt_sort", "order_id"], kind="stable").reset_index(drop=True)
+
+    # Temporal & quality flags
+    dt = pd.to_datetime(df["Waktu Pesanan Dibuat"], errors="coerce")
+    df["is_missing_timestamp"] = dt.isna().astype(int)
     df["order_hour"] = dt.dt.hour.fillna(-1).astype(int)
     df["order_dayofweek"] = dt.dt.dayofweek.fillna(-1).astype(int)
     df["is_late_night"] = dt.dt.hour.isin([22, 23, 0, 1, 2, 3, 4]).astype(int)
 
-    # 4. Valid checkout (t0) domain features (zero post-cancellation leakage)
+    # Checkout (t0) domain features
     df["is_cod"] = df["Metode Pembayaran"].str.contains("COD", case=False, na=False).astype(int)
     df["is_java"] = df["Provinsi"].str.upper().isin(JAVA_PROVINCES).astype(int)
+    df["destination_zone"] = df["Provinsi"].apply(map_destination_zone)
+    df["shipping_tier"] = df["Opsi Pengiriman"].apply(map_shipping_tier)
     df["has_discount"] = (df["Total Diskon"] > 0).astype(int)
     df["is_multi_category"] = (df["num_product_categories"] > 1).astype(int)
-
-    df["weight_per_item"] = df["total_weight_gr"] / df["total_qty"].clip(lower=1)
+    df["avg_item_weight_gr"] = df["total_weight_gr"] / df["total_qty"].clip(lower=1)
     df["shipping_per_kg"] = df["Perkiraan Ongkos Kirim"] / (df["total_weight_gr"] / 1000.0).clip(lower=0.1)
 
-    df["courier_group"] = df["Opsi Pengiriman"].astype(str).str.split("-").str[0].str.strip()
-
-    # Keep Top 20 product categories; group rare ones into 'Other_Category'
-    top_20_cats = df["product_categories"].value_counts().head(20).index
-    df["top_product_cat"] = np.where(
-        df["product_categories"].isin(top_20_cats),
-        df["product_categories"],
-        "Other_Category"
-    )
-
-    # Causal same-day repeat checkout count (strictly prior orders on same day with same city + product)
     df["order_date_str"] = dt.dt.date.astype(str)
     df["same_day_repeat_count"] = np.where(
-        dt.isna(),
-        0,
-        df.groupby(["order_date_str", "Kota/Kabupaten", "product_categories"]).cumcount()
+        dt.isna(), 0, df.groupby(["order_date_str", "Kota/Kabupaten", "product_categories"]).cumcount()
     )
 
-    # 5. Log-transform all right-skewed numerical features (crucial for KNN & SVM distances)
-    skewed_cols = [
-        "total_qty", "total_weight_gr", "Total Diskon",
-        "Perkiraan Ongkos Kirim", "weight_per_item", "shipping_per_kg"
-    ]
-    for col in skewed_cols:
-        df[f"log_{col}"] = np.log1p(df[col].clip(lower=0))
+    # Log-transform skewed features
+    log_cols = {
+        "total_qty": "log_total_qty",
+        "total_weight_gr": "log_total_weight_gr",
+        "Total Diskon": "log_Total Diskon",
+        "Perkiraan Ongkos Kirim": "log_Perkiraan Ongkos Kirim",
+        "avg_item_weight_gr": "log_weight_per_item",
+        "shipping_per_kg": "log_shipping_per_kg",
+    }
+    for raw_col, log_col in log_cols.items():
+        df[log_col] = np.log1p(df[raw_col].clip(lower=0))
 
     return df
 
+# ==============================================================================
+# USAGE: get_temporal_splits(df, val_months=3, test_months=3) -> dict
+#
+# Examples:
+#   splits = get_temporal_splits(df)                              # default: last 3m Test, prior 3m Val
+#   splits = get_temporal_splits(df, val_months=2, test_months=2) # custom:  last 2m Test, prior 2m Val
+#
+# How Month Slicing Works (Example with 20 sorted months: M1 ... M20):
+#   - test_months=2 -> Last 2 months        [M19, M20]       -> "Uji" (Test Set)
+#   - val_months=2  -> 2 months before Test [M17, M18]       -> "Validasi" (Validation Set)
+#   - Remaining     -> All earlier months   [M1 ... M16]     -> "Latih" (Train Set)
+#
+# Leakage Protection:
+#   - `top_product_cat` (Top 20 categories) is fitted ONLY on `Latih` rows, then mapped
+#     to `Validasi` & `Uji` (unseen categories become "Other_Category").
+#
+# Returned Dictionary Keys:
+#   - splits["X_train"], splits["y_train"] : Features & target for Training
+#   - splits["X_val"],   splits["y_val"]   : Features & target for Validation / threshold tuning
+#   - splits["X_test"],  splits["y_test"]  : Features & target for final Test evaluation
+#   - splits["parts"]                      : {"Latih": df_tr, "Validasi": df_va, "Uji": df_te}
+#   - splits["split_summary"]              : Summary DataFrame (period, row count, cancel rate %)
+#   - splits["test_months"]                : List of YYYY-MM strings in Test set
+#   - splits["num_cols"], splits["cat_cols"], splits["all_features"]
+# ==============================================================================
+def get_temporal_splits(df: pd.DataFrame, val_months: int = VAL_MONTHS, test_months: int = TEST_MONTHS) -> dict:
+    """Splits chronologically by month and fits top_product_cat strictly on Train."""
+    data = df.copy()
+    months = sorted(data["order_year_month"].unique())
+    train_m = months[:-(val_months + test_months)]
+    val_m   = months[-(val_months + test_months):-test_months]
+    test_m  = months[-test_months:]
 
-def get_temporal_splits(
-    df: pd.DataFrame,
-    train_ratio: float = 0.70,
-    val_ratio: float = 0.15
-) -> dict:
-    """Splits dataset chronologically into Train, Validation, and Test sets."""
-    feature_cols = NUMERIC_FEATURES + CATEGORICAL_FEATURES
-    X = df[feature_cols]
-    y = df["target"]
+    train_mask = data["order_year_month"].isin(train_m)
+    top_cats = data.loc[train_mask, "product_categories"].value_counts().head(TOP_N_CATEGORIES).index
+    data["top_product_cat"] = np.where(data["product_categories"].isin(top_cats), data["product_categories"], "Other_Category")
 
-    n = len(df)
-    train_end = int(n * train_ratio)
-    val_end = int(n * (train_ratio + val_ratio))
+    parts = {
+        "Latih": data[train_mask],
+        "Validasi": data[data["order_year_month"].isin(val_m)],
+        "Uji": data[data["order_year_month"].isin(test_m)],
+    }
+
+    split_summary = pd.DataFrame([{
+        "Subset": name,
+        "Periode": f"{p['order_year_month'].min()} s.d. {p['order_year_month'].max()}",
+        "Pesanan": len(p),
+        "Batal": int(p["target_batal"].sum()),
+        "Tingkat Batal (%)": round(float(p["target_batal"].mean()) * 100, 2),
+    } for name, p in parts.items()])
 
     return {
-        "X_train": X.iloc[:train_end],
-        "y_train": y.iloc[:train_end],
-        "X_val": X.iloc[train_end:val_end],
-        "y_val": y.iloc[train_end:val_end],
-        "X_test": X.iloc[val_end:],
-        "y_test": y.iloc[val_end:],
-        "num_cols": NUMERIC_FEATURES,
-        "cat_cols": CATEGORICAL_FEATURES,
+        "X_train": parts["Latih"][ALL_FEATURES],
+        "y_train": parts["Latih"]["target_batal"],
+        "X_val": parts["Validasi"][ALL_FEATURES],
+        "y_val": parts["Validasi"]["target_batal"],
+        "X_test": parts["Uji"][ALL_FEATURES],
+        "y_test": parts["Uji"]["target_batal"],
+        "parts": parts,
+        "test_months": test_m,
+        "split_summary": split_summary,
+        "num_cols": NUM_FEATURES,
+        "cat_cols": CAT_FEATURES,
+        "all_features": ALL_FEATURES,
     }
