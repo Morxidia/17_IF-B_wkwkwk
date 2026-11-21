@@ -8,7 +8,8 @@ from sklearn.neighbors import KNeighborsClassifier
 from sklearn.svm import SVC
 from sklearn.metrics import (
     f1_score, precision_score, recall_score,
-    roc_auc_score, average_precision_score, confusion_matrix
+    roc_auc_score, average_precision_score, confusion_matrix,
+    precision_recall_curve
 )
 
 
@@ -48,21 +49,15 @@ def find_best_threshold(y_true, y_probs, min_precision=0.30):
     Step 2: Tests thresholds from 0.10 to 0.89 on the validation set
     to find the cutoff that gives the highest F1-score.
     """
-    best_threshold = 0.50
-    best_f1 = 0.0
+    prec, rec, thr = precision_recall_curve(y_true, y_probs)
+    prec, rec = prec[:-1], rec[:-1]                       
+    f1 = 2 * prec * rec / np.clip(prec + rec, 1e-12, None)
+    ok = prec >= min_precision
+    if ok.any():
+        return float(thr[np.argmax(np.where(ok, f1, -1))])
+    print(f"[warn] no threshold reaches precision>={min_precision}; using best-F1 threshold instead")
+    return float(thr[np.argmax(f1)])
 
-    for thresh in np.arange(0.10, 0.90, 0.01):
-        # Convert probabilities into 0 (Selesai) or 1 (Batal)
-        predictions = (y_probs >= thresh).astype(int)
-
-        prec = precision_score(y_true, predictions, zero_division=0)
-        f1 = f1_score(y_true, predictions, zero_division=0)
-
-        if prec >= min_precision and f1 > best_f1:
-            best_f1 = f1
-            best_threshold = round(float(thresh), 2)
-
-    return best_threshold
 
 
 def run_model(model_type, splits, min_precision=0.30, **hyperparams):
