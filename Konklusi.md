@@ -22,62 +22,72 @@ Namun, pengujian yang tersedia belum memberikan hasil analisis multivariat yang 
 
 **3. Seberapa baik pembatalan dapat diprediksi dari informasi saat pesanan masuk?**
 
-Pemodelan dilakukan dengan tiga algoritma, yaitu K-Nearest Neighbors (KNN), Support Vector Machine (SVM), dan Random Forest, dalam lima konfigurasi eksperimen. Model terbaik adalah **SVM Linear (Run_4_SVM)** dengan hasil pada data test sebagai berikut.
+Pemodelan dilakukan menggunakan tiga algoritma, yaitu K-Nearest Neighbors (KNN), Support Vector Machine (SVM), dan Random Forest. Pencarian hyperparameter dilakukan menggunakan RandomizedSearchCV dengan temporal cross-validation pada data train, kemudian model dibandingkan menggunakan data validasi dan dievaluasi pada data test.
+
+Berdasarkan hasil perbandingan, **Run_2_SVM** dipilih sebagai model dengan performa relatif terbaik di antara model yang diuji. Model tersebut menggunakan konfigurasi SVM dengan kernel RBF, C sebesar 0,5, dan gamma auto. Hasil evaluasi pada data test adalah sebagai berikut.
 
 | Metrik | Hasil |
 |---|---|
-| Threshold | 0,25 |
-| F1-Score | 0,1315 |
-| Precision | 0,2887 |
-| Recall | 0,0851 |
-| PR-AUC | 0,1679 |
-| ROC-AUC | 0,6062 |
+| Threshold | 0,28 |
+| F1-Score | 0,14 |
+| Precision | 0,32 |
+| Recall | 0,09 |
+| PR-AUC | 0,17 |
+| ROC-AUC | 0,61 |
 
-Confusion matrix menunjukkan bahwa dari 329 pesanan yang benar-benar batal, model hanya mendeteksi 28 pesanan, sedangkan 301 pesanan batal lainnya terlewat. Selain itu, terdapat 69 pesanan yang akhirnya selesai tetapi salah diprediksi batal. Jadi, pembatalan hanya dapat diprediksi secara terbatas: model memiliki kemampuan diskriminasi yang relatif lemah dan belum cukup andal untuk digunakan sebagai sistem deteksi dini.
+Berdasarkan confusion matrix, model menghasilkan 29 True Positive, 2.826 True Negative, 62 False Positive, dan 300 False Negative pada data test.
+
+Hasil tersebut menunjukkan bahwa model memiliki performa relatif terbaik di antara model yang diuji, tetapi masih memiliki keterbatasan dalam mendeteksi pesanan batal. Model hanya berhasil mengenali sebagian kecil pembatalan aktual, sehingga belum cukup andal untuk digunakan sebagai sistem deteksi dini secara langsung.
 
 **4. Segmen mana yang layak diprioritaskan untuk penyesuaian kebijakan toko?**
 
 Berdasarkan temuan eksplorasi, aspek yang layak menjadi perhatian dalam penyesuaian kebijakan toko adalah beban ongkos kirim, metode pembayaran, dan karakteristik wilayah tujuan. Pesanan dengan biaya pengiriman yang relatif tinggi perlu menjadi perhatian karena kelompok tersebut menunjukkan tingkat pembatalan lebih tinggi dibandingkan pesanan dengan biaya pengiriman normal.
 
-Analisis kesalahan model memperkuat hal ini: salah satu pola yang berhasil ditangkap model adalah pesanan ke luar Pulau Jawa dengan ongkir tinggi. Pada pesanan batal yang terdeteksi, 86% tujuannya luar Jawa dan median ongkirnya Rp61.000, dibandingkan Rp5.000 pada seluruh pesanan test. Alasan pembatalan yang berkaitan dengan perubahan pesanan dan pembatalan otomatis juga menunjukkan perlunya evaluasi pada proses pemesanan dan pembayaran.
+Analisis kesalahan model terpilih juga menunjukkan bahwa sebagian pesanan batal yang berhasil dideteksi memiliki karakteristik tujuan luar Jawa dan ongkir relatif tinggi. Namun, karakteristik tersebut juga ditemukan pada sebagian pesanan selesai yang salah ditandai sebagai pembatalan. Oleh karena itu, pola hasil prediksi belum dapat digunakan untuk menetapkan segmen prioritas secara definitif.
 
-Dari sisi operasional, toko dapat mempertimbangkan evaluasi subsidi ongkos kirim untuk tujuan luar Jawa, transparansi estimasi biaya pengiriman, serta penyempurnaan informasi pesanan sebelum pembeli menyelesaikan transaksi. Namun, prioritas segmen secara spesifik masih memerlukan validasi lebih lanjut dengan perbandingan tingkat pembatalan per segmen pada jumlah sampel yang memadai.
+Dari sisi operasional, toko dapat mempertimbangkan evaluasi subsidi ongkos kirim untuk tujuan dengan biaya pengiriman tinggi, transparansi estimasi biaya pengiriman, serta penyempurnaan informasi pesanan sebelum pembeli menyelesaikan transaksi. Namun, prioritas segmen secara spesifik masih memerlukan validasi lebih lanjut dengan perbandingan tingkat pembatalan per segmen pada jumlah sampel yang memadai.
+
+Dengan demikian, penyesuaian kebijakan toko sebaiknya didasarkan pada kombinasi temuan EDA dan validasi segmen lebih lanjut, bukan semata-mata berdasarkan hasil prediksi model.
 
 ## D.2 Terjemahan Metrik ke Bahasa Sehari-hari
 
-Pada data test terdapat 3.217 pesanan, dan 329 di antaranya (10,23%) benar-benar batal. Model Run_4_SVM menghasilkan beberapa metrik yang menggambarkan kemampuan model dalam mendeteksi pembatalan.
+Pada data test terdapat 3.217 pesanan, dan 329 di antaranya (10,23%) benar-benar batal. Model Run_2_SVM menghasilkan beberapa metrik yang menggambarkan kemampuan model dalam mendeteksi pembatalan.
 
-- **Recall 0,0851**: dari setiap 100 pesanan yang akhirnya batal, model hanya berhasil mengenali sekitar 9 pesanan. Sekitar 91 pembatalan lainnya tidak berhasil terdeteksi. Hal ini menunjukkan bahwa sebagian besar pembatalan masih terlewat oleh model.
+- **Recall 0,09**: dari setiap 100 pesanan yang akhirnya batal, model berhasil mengenali sekitar 9 pesanan. Sebagian besar pembatalan lainnya masih belum berhasil terdeteksi. Hal ini menunjukkan bahwa model memiliki keterbatasan dalam menemukan seluruh pesanan yang berakhir batal.
 
-- **Precision 0,2887**: model menandai 97 pesanan sebagai berisiko batal. Dari jumlah tersebut, 28 pesanan benar-benar batal, sedangkan 69 pesanan sebenarnya selesai. Dengan kata lain, dari setiap 100 pesanan yang ditandai berisiko batal, sekitar 29 benar-benar batal dan sekitar 71 merupakan salah alarm.
+- **Precision 0,32**: model menandai 91 pesanan sebagai berisiko batal. Dari jumlah tersebut, 29 pesanan benar-benar batal, sedangkan 62 pesanan sebenarnya selesai. Dengan kata lain, sekitar 32 dari setiap 100 pesanan yang ditandai berisiko batal benar-benar batal, sementara sisanya merupakan salah alarm.
 
-- **F1-Score 0,1315**: merupakan ukuran gabungan precision dan recall. Nilai F1 yang rendah menunjukkan bahwa kemampuan model dalam mendeteksi pembatalan dan menjaga ketepatan prediksi masih belum memadai.
+- **F1-Score 0,14**: merupakan ukuran gabungan precision dan recall. Nilai F1 yang masih rendah menunjukkan bahwa keseimbangan antara kemampuan mendeteksi pembatalan dan ketepatan prediksi belum memadai.
 
-- **PR-AUC 0,1679**: menunjukkan kemampuan model dalam membedakan dan mengurutkan pesanan berdasarkan risiko pembatalan pada berbagai threshold. Nilainya berada di atas baseline prevalensi kelas batal pada data test, yaitu sekitar 0,1023, tetapi peningkatan tersebut masih terbatas.
+- **PR-AUC 0,17**: menggambarkan kemampuan model dalam membedakan dan mengurutkan pesanan berdasarkan risiko pembatalan pada berbagai threshold. Nilai PR-AUC model berada di atas prevalensi kelas batal pada data test, yaitu sekitar 0,10, tetapi kemampuan tersebut masih terbatas.
 
-- **ROC-AUC 0,6062**: jika satu pesanan batal dan satu pesanan selesai dipilih secara acak, model memiliki kecenderungan memberikan skor risiko lebih tinggi pada pesanan batal sekitar 60,6% dari pasangan tersebut. Nilai ini masih menunjukkan kemampuan diskriminasi yang relatif lemah.
+- **ROC-AUC 0,61**: menggambarkan kemampuan model dalam membedakan pesanan batal dan selesai berdasarkan skor prediksi pada berbagai threshold. Nilai ini menunjukkan kemampuan diskriminasi yang relatif lemah, meskipun berada di atas performa tebakan acak sebesar 0,50.
 
 Secara keseluruhan, hasil metrik menunjukkan bahwa model masih memiliki keterbatasan dalam mengenali pembatalan secara tepat. Model dapat memberikan indikasi risiko pada sebagian pesanan, tetapi sebagian besar pembatalan masih belum berhasil dideteksi. Oleh karena itu, hasil prediksi belum cukup kuat untuk dijadikan dasar keputusan operasional secara langsung.
 
 ## D.3 Apakah Target Business Understanding Sudah Tercapai?
 
-Kriteria berhasil pada Business Understanding adalah F1-score lebih baik daripada baseline pada data test, dengan target awal Recall ≥ 0,70 dan Precision ≥ 0,30.
+Kriteria keberhasilan pada Business Understanding adalah F1-score lebih baik daripada baseline terbaik pada data test, dengan target awal Recall ≥ 0,70 dan Precision ≥ 0,30.
 
 | Kriteria | Target | Hasil | Status |
 |---|---|---|---|
-| F1 lebih baik dari baseline terbaik | > 0,186 | 0,1315 | Belum tercapai |
-| Recall | ≥ 0,70 | 0,0851 | Belum tercapai |
-| Precision | ≥ 0,30 | 0,2887 | Belum tercapai (hampir) |
+| F1 lebih baik dari baseline terbaik | > 0,186 | 0,14 | Belum tercapai |
+| Recall | ≥ 0,70 | 0,09 | Belum tercapai |
+| Precision | ≥ 0,30 | 0,32 | Tercapai |
 
-Baseline yang dipakai adalah "semua pesanan ditebak batal" (F1 0,186) dan "COD = batal" (F1 0,164). Keduanya mendapat F1 lebih tinggi daripada model, sehingga target belum tercapai. Model hanya unggul dalam precision (0,2887 dibandingkan 0,102 dan 0,095 pada baseline), tetapi recall-nya jauh lebih rendah.
+Baseline yang digunakan adalah baseline pertama, yaitu semua pesanan ditebak batal, dengan F1-score sebesar 0,186, dan baseline kedua, yaitu COD diprediksi batal sementara selain COD diprediksi selesai, dengan F1-score sebesar 0,16. Kedua baseline tersebut memperoleh F1-score lebih tinggi dibandingkan model terpilih, sehingga target F1 belum tercapai.
 
-Secara keseluruhan, target Business Understanding untuk membangun model yang mampu mendeteksi risiko pembatalan secara memadai belum tercapai. Meskipun model dapat memberikan indikasi risiko pada sebagian pesanan, rendahnya recall menunjukkan bahwa sebagian besar pembatalan masih belum dapat dikenali. Selain itu, performa F1 pada data test belum mengungguli baseline terbaik. Oleh karena itu, model belum dapat dianggap sebagai solusi prediksi yang memenuhi kebutuhan bisnis, tetapi hasil penelitian ini tetap memberikan gambaran mengenai keterbatasan prediksi pembatalan menggunakan atribut yang tersedia saat pesanan dibuat.
+Model hanya memenuhi target precision, yaitu sebesar 0,32, tetapi belum memenuhi target recall sebesar 0,70 dan belum menghasilkan F1-score yang lebih tinggi daripada baseline terbaik.
+
+Secara keseluruhan, target Business Understanding untuk membangun model yang mampu mendeteksi risiko pembatalan secara memadai belum tercapai. Meskipun model dapat memberikan indikasi risiko pada sebagian pesanan, rendahnya recall menunjukkan bahwa sebagian besar pembatalan masih belum dapat dikenali. Selain itu, performa F1 pada data test belum mengungguli baseline terbaik.
+
+Oleh karena itu, model belum dapat dianggap sebagai solusi prediksi yang memenuhi kebutuhan bisnis, tetapi hasil penelitian tetap memberikan gambaran mengenai keterbatasan prediksi pembatalan menggunakan atribut yang tersedia saat pesanan dibuat.
 
 ## D.4 Keputusan
 
-SVM Linear (Run_4_SVM) dipilih sebagai model terbaik di antara konfigurasi eksperimen yang telah diuji berdasarkan hasil evaluasi yang diperoleh, dengan mempertimbangkan performa relatif model pembanding dan hasil pada data test. KNN (k=25) menunjukkan indikasi overfitting yang kuat karena performa pada data train jauh lebih tinggi dibandingkan pada data test, yaitu F1-score 0,969 pada data train tetapi hanya 0,107 pada data test. Random Forest juga mengalami penurunan performa ketika dievaluasi pada data test, sedangkan SVM RBF memiliki performa test yang lebih rendah dibandingkan Run_4_SVM, dengan F1-score 0,046.
+Run_2_SVM dipilih sebagai model terbaik di antara model yang diuji berdasarkan hasil perbandingan pada data validasi dan pertimbangan terhadap hasil evaluasi pada data test. Model tersebut memperoleh F1-score validasi sebesar 0,14 dan PR-AUC validasi sebesar 0,20, serta memiliki performa relatif konsisten antara validasi dan test pada F1-score.
 
-Namun, pemilihan Run_4_SVM tidak berarti model telah memenuhi target bisnis. F1-score pada data test masih belum mengungguli baseline terbaik dan recall masih sangat rendah. Oleh karena itu, pemilihan model ini lebih tepat diartikan sebagai pemilihan model dengan performa relatif terbaik di antara eksperimen yang dilakukan, bukan sebagai model yang sudah optimal atau siap digunakan secara operasional.
+Namun, pemilihan Run_2_SVM tidak berarti model telah memenuhi target bisnis. F1-score pada data test masih belum mengungguli baseline terbaik dan recall masih rendah, yaitu sebesar 0,09. Oleh karena itu, pemilihan model ini lebih tepat diartikan sebagai pemilihan model dengan performa relatif terbaik di antara model yang diuji setelah tuning, bukan sebagai model yang sudah optimal atau siap digunakan secara operasional.
 
 Berdasarkan hasil penelitian, keputusan yang dapat diambil saat ini adalah:
 
@@ -87,7 +97,7 @@ Berdasarkan hasil penelitian, keputusan yang dapat diambil saat ini adalah:
 
 3. **Perbaikan proses pemesanan dan pembayaran.** Banyak pembatalan berkaitan dengan perubahan keputusan pembeli, perubahan pesanan, dan pembatalan otomatis. Toko dapat mengevaluasi kejelasan informasi pesanan, proses checkout, serta mekanisme pembayaran untuk mengurangi potensi pembatalan.
 
-4. **Pengembangan model prediksi lebih lanjut.** Run_4_SVM belum direkomendasikan sebagai dasar keputusan otomatis, seperti menolak, menahan, atau memberikan perlakuan khusus pada pesanan. Rendahnya recall menyebabkan sebagian besar pesanan batal tidak terdeteksi, sementara false positive dapat menyebabkan pesanan yang sebenarnya selesai salah ditandai sebagai berisiko batal. Pengembangan model perlu dilakukan lebih lanjut sebelum digunakan dalam proses operasional.
+4. **Pengembangan model prediksi lebih lanjut.** Run_2_SVM belum direkomendasikan sebagai dasar keputusan otomatis, seperti menolak, menahan, atau memberikan perlakuan khusus pada pesanan. Rendahnya recall menyebabkan sebagian besar pesanan batal tidak terdeteksi, sementara false positive dapat menyebabkan pesanan yang sebenarnya selesai salah ditandai sebagai berisiko batal. Pengembangan model perlu dilakukan lebih lanjut sebelum digunakan dalam proses operasional.
 
 Dengan demikian, hasil penelitian saat ini lebih layak dimanfaatkan sebagai bahan evaluasi proses transaksi dan pengiriman berdasarkan temuan EDA, sementara model prediksi masih berada pada tahap pengembangan dan belum siap diterapkan sebagai sistem deteksi dini yang berdampak langsung pada keputusan terhadap pesanan.
 
@@ -97,11 +107,11 @@ Dengan demikian, hasil penelitian saat ini lebih layak dimanfaatkan sebagai baha
 
 2. **Generalisasi terbatas.** Transaksi sangat terkonsentrasi di Pulau Jawa dan kategori produk tertentu pada satu toko, sehingga hasilnya belum tentu berlaku untuk toko lain.
 
-3. **Kemampuan model rendah.** ROC-AUC hanya 0,6062 dan recall 0,0851. Pesanan batal yang terlewat sebanyak 301 pesanan memiliki ciri yang hampir sama dengan pesanan selesai, dengan median ongkir Rp6.500 dan 28% tujuan luar Jawa, dibandingkan median ongkir Rp5.000 dan 26% tujuan luar Jawa pada seluruh pesanan test. Penyebab pembatalan terbanyak, seperti perubahan keputusan pembeli, perubahan pesanan, dan pembatalan otomatis, tidak terlihat secara langsung dari informasi saat checkout.
+3. **Kemampuan model rendah.** ROC-AUC model terpilih sebesar 0,61 dan recall sebesar 0,09 menunjukkan bahwa kemampuan model dalam mendeteksi pembatalan masih terbatas. Sebanyak 300 pesanan batal pada data test belum berhasil terdeteksi. Profil kelompok False Negative memiliki karakteristik yang relatif dekat dengan seluruh pesanan test, dengan 27,33% tujuan luar Jawa dan median ongkir Rp6.500, dibandingkan 26,17% tujuan luar Jawa dan median ongkir Rp5.000 pada seluruh pesanan test. Hal ini menunjukkan bahwa sebagian pembatalan memiliki karakteristik transaksi yang sulit dibedakan dari pesanan selesai berdasarkan fitur yang tersedia saat pesanan dibuat.
 
-4. **Jumlah data test untuk kelas batal terbatas.** Hanya terdapat 329 pesanan batal pada data test, dengan 28 pesanan berhasil terdeteksi. Jumlah tersebut membuat hasil evaluasi berpotensi berubah jika periode test yang digunakan berbeda.
+4. **Jumlah data test untuk kelas batal terbatas.** Terdapat 329 pesanan batal pada data test, dengan 29 pesanan berhasil terdeteksi. Jumlah tersebut membuat hasil evaluasi berpotensi berubah jika periode test yang digunakan berbeda.
 
-5. **Eksperimen model terbatas.** Hanya lima konfigurasi yang dicoba secara manual tanpa pencarian hyperparameter yang sistematis. Eksplorasi algoritma dan pengaturan model masih dapat diperluas untuk mencari konfigurasi yang lebih sesuai dengan kebutuhan prediksi pembatalan.
+5. **Ruang pencarian hyperparameter terbatas.** Pencarian hyperparameter telah dilakukan menggunakan RandomizedSearchCV pada tiga algoritma dengan ruang parameter dan jumlah iterasi yang telah ditentukan. Meskipun pendekatan ini memungkinkan pencarian konfigurasi secara lebih sistematis dibandingkan eksperimen manual, konfigurasi terbaik yang diperoleh masih bergantung pada ruang parameter, jumlah iterasi, dan pembagian cross-validation yang digunakan. Oleh karena itu, konfigurasi yang diperoleh belum tentu merupakan konfigurasi optimal secara menyeluruh.
 
 6. **Analisis faktor dan segmen belum tuntas.** Analisis multivariat untuk mengontrol faktor lain dan pemeringkatan segmen prioritas masih memerlukan pengujian lebih lanjut. Oleh karena itu, hasil EDA belum dapat digunakan untuk menyimpulkan hubungan independen antarvariabel maupun menetapkan segmen prioritas secara definitif.
 
@@ -113,7 +123,7 @@ Berdasarkan keterbatasan yang ditemukan, beberapa pengembangan yang dapat dilaku
 
 2. **Evaluasi temporal:** menggunakan data transaksi dari periode yang lebih baru dan melakukan evaluasi berkala untuk mengantisipasi perubahan karakteristik transaksi serta tingkat pembatalan.
 
-3. **Peningkatan kemampuan model:** melakukan tuning hyperparameter yang lebih sistematis, eksplorasi algoritma alternatif, dan penyesuaian threshold berdasarkan kebutuhan operasional.
+3. **Peningkatan kemampuan model:** memperluas ruang pencarian hyperparameter, mengeksplorasi algoritma alternatif, dan mengevaluasi penyesuaian threshold berdasarkan kebutuhan operasional agar kemampuan model dalam mendeteksi pembatalan dapat ditingkatkan.
 
 4. **Penambahan informasi prediktor:** mengevaluasi kemungkinan penggunaan fitur tambahan yang benar-benar tersedia saat pesanan dibuat, agar model memiliki informasi yang lebih memadai untuk membedakan pesanan batal dan selesai.
 
